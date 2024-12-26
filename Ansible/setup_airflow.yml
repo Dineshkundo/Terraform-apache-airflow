@@ -1,0 +1,83 @@
+---
+- name: Install and configure Apache Airflow
+  hosts: all
+  become: yes
+
+  tasks:
+    - name: Update and upgrade the system
+      apt:
+        update_cache: yes
+        upgrade: dist
+        cache_valid_time: 3600
+
+    - name: Install Python, Pip, and Virtual Environment
+      apt:
+        name:
+          - python3
+          - python3-pip
+          - python3-venv
+        state: present
+
+    - name: Create Airflow project directory
+      file:
+        path: "~/airflow_project"
+        state: directory
+
+    - name: Create a virtual environment for Airflow
+      command: python3 -m venv airflow_venv
+      args:
+        chdir: "~/airflow_project"
+
+    - name: Install Apache Airflow
+      shell: |
+        source airflow_venv/bin/activate
+        export AIRFLOW_VERSION=2.6.2
+        export PYTHON_VERSION="$(python3 --version | cut -d ' ' -f 2 | cut -d '.' -f 1-2)"
+        export CONSTRAINT_URL="https://raw.githubusercontent.com/apache/airflow/constraints-${AIRFLOW_VERSION}/constraints-${PYTHON_VERSION}.txt"
+        pip install --upgrade pip
+        pip install "apache-airflow==${AIRFLOW_VERSION}" --constraint "${CONSTRAINT_URL}"
+      args:
+        chdir: "~/airflow_project"
+
+    - name: Set Airflow home environment variable
+      lineinfile:
+        path: ~/.bashrc
+        line: "export AIRFLOW_HOME=~/airflow"
+
+    - name: Initialize the Airflow database
+      shell: |
+        source airflow_venv/bin/activate
+        export AIRFLOW_HOME=~/airflow
+        airflow db init
+      args:
+        chdir: "~/airflow_project"
+
+    - name: Start Airflow webserver
+      shell: |
+        source airflow_venv/bin/activate
+        airflow webserver --port 8085 &
+      args:
+        chdir: "~/airflow_project"
+
+    - name: Start Airflow scheduler
+      shell: |
+        source airflow_venv/bin/activate
+        airflow scheduler &
+      args:
+        chdir: "~/airflow_project"
+
+    - name: Create an Airflow admin user
+      shell: |
+        source airflow_venv/bin/activate
+        airflow users create \
+          --username admin \
+          --firstname Gowtham \
+          --lastname SB \
+          --role Admin \
+          --email test@admin.com \
+          --password admin123
+      args:
+        chdir: "~/airflow_project"
+
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
